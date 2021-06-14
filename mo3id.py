@@ -1,7 +1,10 @@
 # استدعاء المكتبات
 # importing libraries
+from math import floor
 from datetime import datetime
 import logging, datetime
+import re
+from telethon.client import buttons
 from telethon.sync import TelegramClient
 from telethon import events, Button
 import countdown as count
@@ -13,12 +16,13 @@ from telethon.tl import functions
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                      level=logging.INFO)
 
+
 # الثوابت
 # constants
 token = c.token
 api_id = c.api_id
 api_hash = c.api_hash
-bot = TelegramClient('mo3id', api_id, api_hash).start(bot_token=token)
+bot = TelegramClient('session', api_id, api_hash).start(bot_token=token)
 main_devid = c.main_dev
 
 
@@ -42,12 +46,12 @@ async def event_handler(event):
         # if in private and isn't in data.json
         if not str(chat_id) in list(datafile) and chat_id==sender_id:
             datafile[f"{sender_id}"]={"doing":"start", "dates":[]}
-            await bot.send_message(chat_id,"أهلًا بك في بوت موعد\nاستخدم الازرار بالأسفل للتحكم بالبوت", buttons = [[Button.inline("إضافة موعد", "addingdate"), Button.inline("مواعيدي", "browsedates")],[Button.inline("أضفني إلى المجموعة", "https://t.me/mo3id_bot?startgroup=botstart")], [Button.inline("المصدر", "source")]])
+            await bot.send_message(chat_id,"أهلًا بك في بوت موعد\nاستخدم الازرار بالأسفل للتحكم بالبوت", buttons = [[Button.inline("إضافة موعد", "addingdate"), Button.inline("مواعيدي", "browsedates")],[Button.url("أضفني إلى المجموعة", "https://t.me/mo3id_bot?startgroup=botstart")], [Button.inline("المصدر", "source")]])
             with open("data.json", "w") as f:
                 json.dump(datafile, f)
             return
         # يمكن للمطور فقط تفعيل البوت في المجموعات لتجنب الضغط
-        # only main dev can start bot in groups
+        # only main dev can activate bot in groups
         if not str(chat_id) in list(datafile) and main_devid==sender_id and chat_id!=sender_id:
             datafile[f"{chat_id}"]={"controller":{"id":0, "doing":"start"}, "dates":[]}
             await event.reply("تم التفعيل")
@@ -59,6 +63,7 @@ async def event_handler(event):
         if str(chat_id) in list(datafile) and chat_id == sender_id:
             datafile[f"{chat_id}"]["doing"] = "start"
             await bot.send_message(chat_id,"أهلًا بك في بوت موعد\nاستخدم الازرار بالأسفل للتحكم بالبوت", buttons = [[Button.inline("إضافة موعد", "addingdate"), Button.inline("مواعيدي", "browsedates")],[Button.url("أضفني إلى المجموعة", "https://t.me/mo3id_bot?startgroup=botstart")], [Button.inline("المصدر", "source")]])
+            return
         if str(chat_id) in list(datafile) and chat_id != sender_id:
             sender = await event.get_sender()
             sender_firstname = sender.first_name
@@ -82,6 +87,19 @@ async def event_handler(event):
                 await event.reply("عذرًا يجب أن تكون مشرفًا في المجموعة") 
         # تحديث ملف البيانات
         # update data.json
+        with open("data.json", "w") as f:
+            json.dump(datafile, f)
+        return
+    # أمر المغادرة من المجموعة وحذف ملفها
+    # leave group and delete it's info
+    if sender_id == main_devid and text == "غادر" and sender_id != chat_id:
+        await event.reply("سيعلم الجمعُ ممن ضمَّ مجلسنا , بأنني خيرُ من تسعى به قدمُ")
+        await bot.delete_dialog(chat_id, revoke=True)
+        with open("data.json", "r") as f:
+            datafile = json.loads(f.read())
+        for group in list(datafile):
+            if group == str(chat_id):
+                del datafile[f"{chat_id}"]
         with open("data.json", "w") as f:
             json.dump(datafile, f)
         return
@@ -116,6 +134,8 @@ async def event_handler(event):
                 year = int(text_list[0])
                 month = int(text_list[1])
                 day = int(text_list[2])
+                # التحقق من صلاحية التاريخ
+                # checking the date availability
                 if month<1 or month>12 or day<1 or day>30:
                     await event.reply("عذرًا الصيغة غير صحيحة\nحاول مرةً أخرى")
                     return
@@ -138,7 +158,7 @@ async def event_handler(event):
                     with open("data.json", "w") as f:
                         json.dump(datafile, f)
                     datename = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"][len(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"])-1][0]
-                    await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nارسل كلمة <code>موعد</code> لرؤية المواعيد", parse_mode = "HTML")
+                    await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nارسل كلمة <code>موعد</code> لرؤية المواعيد",buttons = [[Button.inline("العودة", "back")]], parse_mode = "HTML")
                     with open("data.json", "r") as f:
                         datafile = json.loads(f.read())
                     datafile[f"{chat_id}"]["doing"] = "start"
@@ -149,6 +169,8 @@ async def event_handler(event):
             if len(text_list)!=3:
                 await event.reply("عذرًا الصيغة غير صحيحة\nحاول مرةً أخرى")
                 return
+        # إذا لم تكن الرسالة (موعد) سيرسل تنبيه بأن الأمر غير واضح
+        # If message isn't (موعد) it will notify the user
         if text!="موعد":
             await event.reply("لا أفهم ماذا تقول ارسل\n /start")
             return
@@ -158,6 +180,8 @@ async def event_handler(event):
         if json.loads(open("data.json", "r").read())[f"{chat_id}"]["controller"]["doing"] == "addingdatename":
             with open("data.json", "r") as f:
                 datafile = json.loads(f.read())
+            # التحقق من عدم تواجد اسم العنوان من قبل
+            # checking if the date name already exists
             for date in datafile[f"{chat_id}"]["dates"]:
                 if date[0] == text:
                     await event.reply("يوجد موعد مسجل مسبقًا بهذا العنوان", buttons=[[Button.inline("العودة", "back")]])
@@ -173,6 +197,8 @@ async def event_handler(event):
                 json.dump(datafile, f)
             await event.reply("جميل الآن ارسل التاريخ بالميلادي وفق الصيغة\n<code>YYYY/MM/DD</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
             return
+        # إضافة التاريخ للموعد
+        # adding date
         if json.loads(open("data.json", "r").read())[f"{chat_id}"]["controller"]["doing"] == "addingdate":
             text_list = text.split("/")
             if len(text_list)==3:
@@ -201,7 +227,7 @@ async def event_handler(event):
                     with open("data.json", "w") as f:
                         json.dump(datafile, f)
                     datename = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"][len(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"])-1][0]
-                    await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nارسل كلمة <code>موعد</code> لرؤية المواعيد", parse_mode = "HTML")
+                    await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nارسل كلمة <code>موعد</code> لرؤية المواعيد",buttons = [[Button.inline("العودة", "back")]], parse_mode = "HTML")
                     with open("data.json", "r") as f:
                         datafile = json.loads(f.read())
                     datafile[f"{chat_id}"]["controller"]["doing"] = "start"
@@ -223,15 +249,18 @@ async def event_handler(event):
         response += "سبحان الله وبحمده سبحان الله العظيم"
         await event.reply(response)
         return
+    # فقط للمجموعات المفعلة
+    # only activated groups
     if not chat_id in list(json.loads(open("data.json", "r").read())):
         return
-# عندما يضيف أحد البوت لمجموعته
-# when someone add the bot to a group
+
+# حدث إضافة إلى مجموعة
+# adding bot to group
 @bot.on(events.ChatAction)
 async def handler(event):
     chat_id = event.chat_id
     if "bot id" in event.action_message.action.users:
-        await bot.send_message(chat_id,"مرحبًا أنا بوت موعد سأكون مسؤولًا عن ترتيب مواعيد المجموعة\nقم برفعي مشرفًا (لا تهم الصلاحيات) وتواصل مع المطور لتفعيل البوت @orymef_bot")
+        await bot.send_message(chat_id,"السلام عليكم ورحمة الله وبركاته\nأنا بوت موعد سأكون مسؤولًا عن ترتيب مواعيد المجموعة\nقم برفعي مشرفًا (لا تهم الصلاحيات) وتواصل مع المطور لتفعيل البوت @orymef_bot")
 
 # حدث ضغط زر
 # button event
@@ -245,16 +274,21 @@ async def callbackhandler(event):
     # أوامر الخاص
     # in private
     if chat_id==sender_id:
+        # إضافة موعد
+        # adding a date
         if data == "addingdate":
-            # تخزين أوامر المتحكم
-            # sorting controller commands
-            with open("data.json") as f:
-                datafile = json.loads(f.read())
-            datafile[f"{chat_id}"]["doing"] = "addingdatename"
-            with open("data.json", "w") as f:
-                json.dump(datafile, f)
-            await event.edit("حسنًا ارسل اسم الموعد الذي تريد إضافته", buttons=[[Button.inline("العودة","back")]], parse_mode = "HTML")
-            return
+            # التحقق من عدد المواعيد
+            # checking dates number
+            if len(list(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"]))<10:
+                with open("data.json") as f:
+                    datafile = json.loads(f.read())
+                datafile[f"{chat_id}"]["doing"] = "addingdatename"
+                with open("data.json", "w") as f:
+                    json.dump(datafile, f)
+                await event.edit("حسنًا ارسل اسم الموعد الذي تريد إضافته", buttons=[[Button.inline("العودة","back")]], parse_mode = "HTML")
+                return
+            if len(list(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"]))>=10:
+                await event.edit("تأتي وتطلب مني تسجيل أكثر من 10 مواعيد، لكنك لا تطلب باحترام، ولا تعرض علي صداقتك، أنت لم تفكر بأن تناديني <b>بموعد</b>، مالذي فعلته لك لاستحق عدم احترامك؟", parse_mode="HTML", buttons=[[Button.inline("العودة", "back")]])
         # مواعيدي
         # browsing dates
         if data == "browsedates":
@@ -283,7 +317,7 @@ async def callbackhandler(event):
                 json.dump(datafile, f)
             sender = await event.get_sender()
             sender_firstname=sender.first_name
-            await event.edit(f"أهلًا بك في بوت موعد\nاستخدم الازرار بالأسفل للتحكم بالبوت", buttons = [[Button.inline("إضافة موعد", "addingdate"), Button.inline("مواعيدي", "browsedates")], [Button.inline("المصدر", "source")]], parse_mode="HTML")
+            await event.edit(f"أهلًا بك في بوت موعد\nاستخدم الازرار بالأسفل للتحكم بالبوت", buttons = [[Button.inline("إضافة موعد", "addingdate"), Button.inline("مواعيدي", "browsedates")],[Button.url("أضفني إلى المجموعة", "https://t.me/mo3id_bot?startgroup=botstart")], [Button.inline("المصدر", "source")]], parse_mode="HTML")
             return
         # مصدر البوت
         # source
@@ -319,12 +353,27 @@ async def callbackhandler(event):
                     year = date[1]
                     month = date[2]
                     day = date[3]
-            await event.edit(f"موعد <code>{datename}</code> يُعقد في (<code>{year}/{month}/{day}</code>)",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                    datetimestamped = datetime.datetime(year,month,day).timestamp()-datetime.datetime.now().timestamp()
+                    days = count.countdown(datetimestamped)
+                    hours = count.hours_countdown(datetimestamped)
+                    minutes = count.min_countdown(datetimestamped)
+                    seconds = count.sec_countdown(floor(datetimestamped%60))
+                    until = ""
+                    if len(re.findall(r"\d+",days))>0:
+                        until = f"{days}\n{hours}\n{minutes}\n{seconds}"
+                    if len(re.findall(r"\d+",hours)) >0 and len(re.findall(r"\d+",days))==0:
+                        until = f"{hours}\n{minutes}\n{seconds}"
+                    if len(re.findall(r"\d+",minutes))>0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
+                        until = f"{minutes}\n{seconds}"
+                    if len(re.findall(r"\d+",seconds))>0 and len(re.findall(r"\d+",minutes))==0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
+                        until = f"{seconds}"
+            await event.edit(f"موعد <code>{datename}</code> يُعقد في (<code>{year}/{month}/{day}</code>)\nويبقى عليه ⏰:\n{until}\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
             return
         if data == "cancel":
             with open("data.json", "r") as f:
                 datafile = json.loads(f.read())
             datafile[f"{chat_id}"]["dates"].pop()
+            datafile[f"{chat_id}"]["doing"] = "start"
             with open("data.json", "w") as f:
                 json.dump(datafile,f)
             sender = await event.get_sender()
@@ -338,15 +387,20 @@ async def callbackhandler(event):
             # إضافة موعد
             # adding a date
             if data == "addingdate":
-                # تخزين أوامر المتحكم
-                # sorting controller commands
-                with open("data.json") as f:
-                    datafile = json.loads(f.read())
-                datafile[f"{chat_id}"]["controller"]["doing"] = "addingdatename"
-                with open("data.json", "w") as f:
-                    json.dump(datafile, f)
-                await event.edit("حسنًا ارسل اسم الموعد الذي تريد إضافته", buttons=[[Button.inline("العودة","back")]], parse_mode = "HTML")
-                return
+                # التحقق من عدد المواعيد
+                # checking dates number
+                if len(list(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"]))<10:
+                    # تخزين أوامر المتحكم
+                    # sorting controller commands
+                    with open("data.json") as f:
+                        datafile = json.loads(f.read())
+                    datafile[f"{chat_id}"]["controller"]["doing"] = "addingdatename"
+                    with open("data.json", "w") as f:
+                        json.dump(datafile, f)
+                    await event.edit("حسنًا ارسل اسم الموعد الذي تريد إضافته", buttons=[[Button.inline("العودة","back")]], parse_mode = "HTML")
+                    return
+                if len(list(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"]))>=10:
+                    await event.edit("تأتي وتطلب مني تسجيل أكثر من 10 مواعيد، لكنك لا تطلب باحترام، ولا تعرض علي صداقتك، أنت لم تفكر بأن تناديني <b>بموعد</b>، مالذي فعلته لك لاستحق عدم احترامك؟", parse_mode="HTML", buttons=[[Button.inline("العودة", "back")]])
             # مواعيدي
             # browsing dates
             if data == "browsedates":
@@ -398,7 +452,7 @@ async def callbackhandler(event):
                         datafile[f"{chat_id}"]["dates"].remove(date)
                 with open("data.json", "w") as f:
                     json.dump(datafile, f)
-                await event.edit(f"تم مسح موعد<code>{datename}</code>", buttons=[[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                await event.edit(f"تم مسح موعد <code>{datename}</code>", buttons=[[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
                 return
             # عرض موعد
             # viewing a date
@@ -411,7 +465,21 @@ async def callbackhandler(event):
                         year = date[1]
                         month = date[2]
                         day = date[3]
-                await event.edit(f"موعد <code>{datename}</code> يُعقد في (<code>{year}/{month}/{day}</code>)",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                        datetimestamped = datetime.datetime(year,month,day).timestamp()-datetime.datetime.now().timestamp()
+                        days = count.countdown(datetimestamped)
+                        hours = count.hours_countdown(datetimestamped)
+                        minutes = count.min_countdown(datetimestamped)
+                        seconds = count.sec_countdown(floor(datetimestamped%60))
+                        until = ""
+                        if len(re.findall(r"\d+",days))>0:
+                            until = f"{days}\n{hours}\n{minutes}\n{seconds}"
+                        if len(re.findall(r"\d+",hours)) >0 and len(re.findall(r"\d+",days))==0:
+                            until = f"{hours}\n{minutes}\n{seconds}"
+                        if len(re.findall(r"\d+",minutes))>0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
+                            until = f"{minutes}\n{seconds}"
+                        if len(re.findall(r"\d+",seconds))>0 and len(re.findall(r"\d+",minutes))==0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
+                            until = f"{seconds}"
+                await event.edit(f"موعد <code>{datename}</code> يُعقد في (<code>{year}/{month}/{day}</code>)\nويبقى عليه ⏰:\n{until}\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
                 return
             # إلغاء تسجيل الموعد
             # canceling date
@@ -419,6 +487,7 @@ async def callbackhandler(event):
                 with open("data.json", "r") as f:
                     datafile = json.loads(f.read())
                 datafile[f"{chat_id}"]["dates"].pop()
+                datafile[f"{chat_id}"]["controller"]["doing"] = "start"
                 with open("data.json", "w") as f:
                     json.dump(datafile,f)
                 sender = await event.get_sender()
