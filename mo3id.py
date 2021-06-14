@@ -225,12 +225,14 @@ async def event_handler(event):
         return
     if not chat_id in list(json.loads(open("data.json", "r").read())):
         return
-
+# عندما يضيف أحد البوت لمجموعته
+# when someone add the bot to a group
 @bot.on(events.ChatAction)
 async def handler(event):
     chat_id = event.chat_id
-    if 1701498710 in event.action_message.action.users:
+    if "bot id" in event.action_message.action.users:
         await bot.send_message(chat_id,"مرحبًا أنا بوت موعد سأكون مسؤولًا عن ترتيب مواعيد المجموعة\nقم برفعي مشرفًا (لا تهم الصلاحيات) وتواصل مع المطور لتفعيل البوت @orymef_bot")
+
 # حدث ضغط زر
 # button event
 @bot.on(events.CallbackQuery)
