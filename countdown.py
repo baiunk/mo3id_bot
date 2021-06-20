@@ -1,5 +1,7 @@
 import datetime
 from math import floor
+import pytz
+from ummalqura.hijri_date import HijriDate
 
 def countdown(input_date):
     time = input_date
@@ -88,43 +90,61 @@ def sec_countdown(input_time):
 
 
 
-def fullcount(event, goal: datetime, text):
-    dt = event.message.date
-    unix_time = dt.timestamp()
-    messageTime = unix_time + 10800
-    remainder = goal.timestamp() - messageTime
+def fullcount(goal: datetime, text):
+    rdtimezone = pytz.timezone('Asia/Riyadh')
+    remainder = goal.timestamp() - datetime.datetime.now(rdtimezone).timestamp()
     days = remainder / (3600 * 24)
     hours = (remainder % 86400) / 3600
+    response = ""
+    goalhijri = HijriDate.get_hijri_date(goal.date())
+    dayname = HijriDate(goal.date().year, goal.date().month, goal.date().day, gr=True).day_name
     if remainder > 0:
-        response = f"""⏰ باقي على {text}:
-{countdown(remainder)}
-{goal.date()}
+        response = f"""⏰ باقي على <code>{text}</code>:
+<code>{countdown(remainder)}</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
 """
         if days <= 10:
-            response = f"""⏰ باقي على {text}:
-{countdown(remainder)} و{hours_countdown(remainder)}
-{goal.date()}
+            response = f"""⏰ باقي على <code>{text}</code>:
+<code>{countdown(remainder)} و{hours_countdown(remainder)}</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
 """
             if hours < 1 and days > 1:
-                response = f"""⏰ باقي على {text}:
-{countdown(remainder)}
-{goal.date()}
+                response = f"""⏰ باقي على <code>{text}</code>:
+<code>{countdown(remainder)}</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
 """
             if days < 1:
-                response = f"""⏰ باقي على {text}:
-{hours_countdown(remainder)}
-{goal.date()}
+                response = f"""⏰ باقي على <code>{text}</code>:
+<code>{hours_countdown(remainder)}</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
 """
                 if remainder < 3600:
-                    response = f"""⏰ باقي على {text}:
-{min_countdown(remainder)}
-{goal.date()}
+                    response = f"""⏰ باقي على <code>{text}</code>:
+<code>{min_countdown(remainder)}</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
 """
                     if 60 > remainder > 0:
-                        response = f"""⏰ باقي على {text}:
-{sec_countdown(remainder)}
-{goal.date()}
+                        response = f"""⏰ باقي على <code>{text}</code>:
+<code>{sec_countdown(remainder)}</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
 """
-                        if remainder<0:
-                            return
+    if remainder<0:
+        response = f"""⏰ باقي على <code>{text}</code>:
+<code>انتهى</code>
+يوم <code>{dayname}</code> الموافق:
+<code>{goalhijri} هـ</code>
+<code>{goal.date()} مـ</code>
+"""
     return response
