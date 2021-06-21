@@ -1,16 +1,14 @@
 # استدعاء المكتبات
 # importing libraries
 from math import floor
-from datetime import datetime
-import logging, datetime
-from os import read
-import re
+from datetime import datetime, tzinfo, timezone
+import logging, datetime , re , pytz , json
+from ummalqura.hijri_date import HijriDate
 from telethon.client import buttons
 from telethon.sync import TelegramClient
 from telethon import events, Button
 import countdown as count
 import constants as c
-import json
 from telethon.tl import functions
 
 # logging
@@ -98,9 +96,9 @@ async def event_handler(event):
         with open("data.json", "r") as f:
             datafile = json.loads(f.read())
         for date in datafile[f"{chat_id}"]["dates"]:
-            response += f"{count.fullcount(event,datetime.datetime(int(date[1]),int(date[2]),int(date[3])), date[0])}\n"
+            response += f"{count.fullcount(datetime.datetime(int(date[1]),int(date[2]),int(date[3])), date[0])}\n"
         response += "سبحان الله وبحمده سبحان الله العظيم"
-        await event.reply(response)
+        await event.reply(response, parse_mode = "HTML")
         return
     # أوامر المطور
     # dev commands
@@ -165,14 +163,15 @@ async def event_handler(event):
             else:
                 pass
             datafile[f"{chat_id}"]["dates"].append([f"{text}"])
-            datafile[f"{chat_id}"]["doing"] = "addingdate"
+            datafile[f"{chat_id}"]["doing"] = "datetype"
             with open("data.json", "w") as f:
                 json.dump(datafile, f)
-            await event.reply("جميل الآن أرسل التاريخ بالميلادي وفق الصيغة\n<code>YYYY/MM/DD</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
+            await event.reply("ممتاز الآن اختر نوع التاريخ (<code>هجري/ميلادي</code>)", buttons=[[Button.inline("ميلادي","datetypegr"),Button.inline("هجري","datetypehj")],[Button.inline("إلغاء", "cancel")]],parse_mode= "HTML")
             return
         # إضافة تاريخ الموعد
         # adding date
         if json.loads(open("data.json", "r").read())[f"{chat_id}"]["doing"] == "addingdate":
+            dtype = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dtype"]
             text_list = text.split("/")
             if len(text_list)==3:
                 year = int(text_list[0])
@@ -183,43 +182,83 @@ async def event_handler(event):
                 if month<1 or month>12 or day<1 or day>30:
                     await event.reply("عذرًا الصيغة غير صحيحة\nحاول مرةً أخرى")
                     return
-                if datetime.datetime(year,month,day).timestamp() < event.message.date.timestamp():
-                    await event.reply("مافات قد مات", buttons=[[Button.inline("العودة", "back")]])
-                    with open("data.json", "r") as f:
-                        datafile = json.loads(f.read())
-                    datafile[f"{chat_id}"]["doing"] = "start"
-                    datafile[f"{chat_id}"]["dates"].pop()
-                    with open("data.json", "w") as f:
-                        json.dump(datafile, f)
-                    return
-                else:
-                    date = datetime.datetime(year,month,day)
-                    with open("data.json", "r") as f:
-                        datafile = json.loads(f.read())
-                    datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(year)
-                    datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(month)
-                    datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(day)
-                    with open("data.json", "w") as f:
-                        json.dump(datafile, f)
-                    datename = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"][len(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"])-1][0]
-                    await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nأرسل عنوان الموعد لرؤية ماتبقى عليه\nأو أرسل كلمة <code>موعد</code> لرؤية جميع المواعيد",buttons = [[Button.inline("العودة", "back")]], parse_mode = "HTML")
-                    with open("data.json", "r") as f:
-                        datafile = json.loads(f.read())
-                    datafile[f"{chat_id}"]["doing"] = "start"
-                    with open("data.json", "w") as f:
-                        json.dump(datafile, f)
-                    
-                    return
+                # نوع التقويم
+                # date calendar
+                if dtype == "hj":
+                    if len(str(month)) == 1:
+                        month = f"0{month}"
+                    if len(str(day)) == 1:
+                        day = f"0{day}"
+                    if HijriDate.get_georing_date(f"{year}-{month}-{day}") <= datetime.date.today():
+                        with open("data.json", "r") as f:
+                            datafile = json.loads(f.read())
+                        datafile[f"{chat_id}"]["doing"] = "start"
+                        datafile[f"{chat_id}"]["dates"].pop()
+                        with open("data.json", "w") as f:
+                            json.dump(datafile, f)
+                        await event.reply("مافات قد مات", buttons=[[Button.inline("العودة", "back")]])
+                        return
+                    else:
+                        if len(str(month)) == 1:
+                            month = f"0{month}"
+                        if len(str(day)) == 1:
+                            day = f"0{day}"
+                        date = HijriDate.get_georing_date(f"{year}-{month}-{day}")
+                        pass
+                if dtype == "gr":
+                    if datetime.datetime(year,month,day).timestamp() < event.message.date.timestamp():
+                        await event.reply("مافات قد مات", buttons=[[Button.inline("العودة", "back")]])
+                        with open("data.json", "r") as f:
+                            datafile = json.loads(f.read())
+                        datafile[f"{chat_id}"]["doing"] = "start"
+                        datafile[f"{chat_id}"]["dates"].pop()
+                        with open("data.json", "w") as f:
+                            json.dump(datafile, f)
+                        return
+                    else:
+                        date = datetime.datetime(year,month,day)
+                        pass
+                with open("data.json", "r") as f:
+                    datafile = json.loads(f.read())
+                datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(date.year)
+                datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(date.month)
+                datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(date.day)
+                with open("data.json", "w") as f:
+                    json.dump(datafile, f)
+                datename = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"][len(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"])-1][0]
+                await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nأرسل عنوان الموعد لرؤية ماتبقى عليه\nأو أرسل كلمة <code>موعد</code> لرؤية جميع المواعيد",buttons = [[Button.inline("العودة", "back")]], parse_mode = "HTML")
+                with open("data.json", "r") as f:
+                    datafile = json.loads(f.read())
+                datafile[f"{chat_id}"]["doing"] = "start"
+                datafile[f"{chat_id}"].pop("dtype")
+                with open("data.json", "w") as f:
+                    json.dump(datafile, f)
+                return
             if len(text_list)!=3:
                 await event.reply("عذرًا الصيغة غير صحيحة\nحاول مرةً أخرى")
                 return
         # الرد على عنوان الموعد
-        # reply to the date name
+        # reply to date name
         if len(text) <= 30:
             for response in list(json.loads(open("data.json","r").read())[f"{chat_id}"]["dates"]):
                 if text == response[0]:
-                    await event.reply(f"{count.fullcount(event,datetime.datetime(int(response[1]),int(response[2]),int(response[3])), response[0])}\nاستغفرالله")
+                    await event.reply(f"{count.fullcount(datetime.datetime(int(response[1]),int(response[2]),int(response[3])), response[0])}\nاستغفرالله", parse_mode = "HTML")
                     return
+        # أمر الآن
+        # now command
+        if text == "الآن":
+            rdtimezone = pytz.timezone('Asia/Riyadh')
+            now = datetime.datetime.now(rdtimezone)
+            if now.hour<=12 and now.hour != 0:
+                nowtime = f"{now.hour}:{now.minute} ص"
+            if now.hour >12 and now.hour != 0:
+                nowtime = f"{now.hour%12}:{now.minute} م"
+            if now.hour == 0:
+                nowtime = f"12:{now.minute} ص"
+            hijrid = HijriDate(now.year,now.month,now.day, gr=True)
+            ar_day = hijrid.day_name
+            await event.reply(f"الآن الوقت بتوقيت الرياض:\n<code>{nowtime}</code>\n\nاليوم <code>{ar_day}</code> بتاريخ:\n<code>{hijrid.year}/{hijrid.month}/{hijrid.day} هـ</code>\n<code>{now.year}/{now.month}/{now.day} مـ</code>\n⏰", parse_mode = "HTML")
+            return
         # إذا لم تكن الرسالة (موعد) سيرسل تنبيه بأن الأمر غير واضح
         # If message isn't (موعد) it will notify the user
         if text:
@@ -254,49 +293,76 @@ async def event_handler(event):
                 else:
                     pass
                 datafile[f"{chat_id}"]["dates"].append([f"{text}"])
-                datafile[f"{chat_id}"]["controller"]["doing"] = "addingdate"
+                datafile[f"{chat_id}"]["controller"]["doing"] = "datetype"
                 with open("data.json", "w") as f:
                     json.dump(datafile, f)
-                await event.reply("جميل الآن أرسل التاريخ بالميلادي وفق الصيغة\n<code>YYYY/MM/DD</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
+                await event.reply("ممتاز الآن اختر نوع التاريخ (<code>هجري/ميلادي</code>)", buttons=[[Button.inline("ميلادي","datetypegr"),Button.inline("هجري","datetypehj")],[Button.inline("إلغاء", "cancel")]],parse_mode= "HTML")
                 return
             # إضافة التاريخ للموعد
             # adding date
             if json.loads(open("data.json", "r").read())[f"{chat_id}"]["controller"]["doing"] == "addingdate":
+                dtype = json.loads(open("data.json", "r").read())[f"{chat_id}"]["controller"]["dtype"]
                 text_list = text.split("/")
                 if len(text_list)==3:
                     year = int(text_list[0])
                     month = int(text_list[1])
                     day = int(text_list[2])
+                    # التحقق من صلاحية التاريخ
+                    # checking the date availability
                     if month<1 or month>12 or day<1 or day>30:
                         await event.reply("عذرًا الصيغة غير صحيحة\nحاول مرةً أخرى")
                         return
-                    if datetime.datetime(year,month,day).timestamp() < event.message.date.timestamp():
-                        await event.reply("مافات قد مات", buttons=[[Button.inline("العودة", "back")]])
-                        with open("data.json", "r") as f:
-                            datafile = json.loads(f.read())
-                        datafile[f"{chat_id}"]["controller"]["doing"] = "start"
-                        datafile[f"{chat_id}"]["dates"].pop()
-                        with open("data.json", "w") as f:
-                            json.dump(datafile, f)
-                        return
-                    else:
-                        date = datetime.datetime(year,month,day)
-                        with open("data.json", "r") as f:
-                            datafile = json.loads(f.read())
-                        datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(year)
-                        datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(month)
-                        datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(day)
-                        with open("data.json", "w") as f:
-                            json.dump(datafile, f)
-                        datename = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"][len(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"])-1][0]
-                        await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nأرسل كلمة <code>موعد</code> لرؤية المواعيد",buttons = [[Button.inline("العودة", "back")]], parse_mode = "HTML")
-                        with open("data.json", "r") as f:
-                            datafile = json.loads(f.read())
-                        datafile[f"{chat_id}"]["controller"]["doing"] = "start"
-                        with open("data.json", "w") as f:
-                            json.dump(datafile, f)
-                        
-                        return
+                    # نوع التقويم
+                    # date calendar
+                    if dtype == "hj":
+                        if len(str(month)) == 1:
+                            month = f"0{month}"
+                        if len(str(day)) == 1:
+                            day = f"0{day}"
+                        if HijriDate.get_georing_date(f"{year}-{month}-{day}") < datetime.date.today():
+                            with open("data.json", "r") as f:
+                                datafile = json.loads(f.read())
+                            datafile[f"{chat_id}"]["controller"]["doing"] = "start"
+                            datafile[f"{chat_id}"]["dates"].pop()
+                            with open("data.json", "w") as f:
+                                json.dump(datafile, f)
+                            await event.reply("مافات قد مات", buttons=[[Button.inline("العودة", "back")]])
+                            return
+                        else:
+                            if len(str(month)) == 1:
+                                month = f"0{month}"
+                            if len(str(day)) == 1:
+                                day = f"0{day}"
+                            date = HijriDate.get_georing_date(f"{year}-{month}-{day}")
+                            pass
+                    if dtype == "gr":
+                        if datetime.datetime(year,month,day).timestamp() < event.message.date.timestamp():
+                            await event.reply("مافات قد مات", buttons=[[Button.inline("العودة", "back")]])
+                            with open("data.json", "r") as f:
+                                datafile = json.loads(f.read())
+                            datafile[f"{chat_id}"]["controller"]["doing"] = "start"
+                            datafile[f"{chat_id}"]["dates"].pop()
+                            with open("data.json", "w") as f:
+                                json.dump(datafile, f)
+                            return
+                        else:
+                            date = datetime.datetime(year,month,day)
+                            pass
+                    with open("data.json", "r") as f:
+                        datafile = json.loads(f.read())
+                    datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(date.year)
+                    datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(date.month)
+                    datafile[f"{chat_id}"]["dates"][len(datafile[f"{chat_id}"]["dates"])-1].append(date.day)
+                    with open("data.json", "w") as f:
+                        json.dump(datafile, f)
+                    datename = json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"][len(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"])-1][0]
+                    await event.reply(f"تم إضافة الموعد <code>{datename}</code> بتاريخ <code>{year}/{month}/{day}</code>\nأرسل عنوان الموعد لرؤية ماتبقى عليه\nأو أرسل كلمة <code>موعد</code> لرؤية جميع المواعيد",buttons = [[Button.inline("العودة", "back")]], parse_mode = "HTML")
+                    with open("data.json", "r") as f:
+                        datafile = json.loads(f.read())
+                    datafile[f"{chat_id}"]["controller"]["doing"] = "start"
+                    with open("data.json", "w") as f:
+                        json.dump(datafile, f)
+                    return
                 if len(text_list)!=3:
                     await event.reply("عذرًا الصيغة غير صحيحة\nحاول مرةً أخرى")
                     return
@@ -305,15 +371,29 @@ async def event_handler(event):
         if len(text) <= 30:
             for response in list(json.loads(open("data.json","r").read())[f"{chat_id}"]["dates"]):
                 if text == response[0]:
-                    await event.reply(f"{count.fullcount(event,datetime.datetime(int(response[1]),int(response[2]),int(response[3])), response[0])}\nاستغفرالله")
+                    await event.reply(f"{count.fullcount(datetime.datetime(int(response[1]),int(response[2]),int(response[3])), response[0])}\nاستغفرالله", parse_mode = "HTML")
                     return
-
+        # أمر الآن
+        # now command
+        if text == "الآن":
+            rdtimezone = pytz.timezone('Asia/Riyadh')
+            now = datetime.datetime.now(rdtimezone)
+            if now.hour<=12 and now.hour != 0:
+                nowtime = f"{now.hour}:{now.minute} ص"
+            if now.hour >12 and now.hour != 0:
+                nowtime = f"{now.hour%12}:{now.minute} م"
+            if now.hour == 0:
+                nowtime = f"12:{now.minute} ص"
+            hijrid = HijriDate(now.year,now.month,now.day, gr=True)
+            ar_day = hijrid.day_name
+            await event.reply(f"الآن الوقت بتوقيت الرياض:\n<code>{nowtime}</code>\n\nاليوم <code>{ar_day}</code> بتاريخ:\n<code>{hijrid.year}/{hijrid.month}/{hijrid.day} هـ</code>\n<code>{now.year}/{now.month}/{now.day} مـ</code>\n⏰", parse_mode = "HTML")
+            return
 # حدث إضافة إلى مجموعة
 # adding bot to group
 @bot.on(events.ChatAction)
 async def handler(event):
     chat_id = event.chat_id
-    if "bot id" in event.action_message.action.users:
+    if bot id in event.action_message.action.users:
         await bot.send_message(chat_id,"السلام عليكم ورحمة الله وبركاته\nأنا بوت موعد سأكون مسؤولًا عن ترتيب مواعيد المجموعة\nقم برفعي مشرفًا (لا تهم الصلاحيات) وتواصل مع المطور لتفعيل البوت @orymef_bot")
 
 # حدث ضغط زر
@@ -344,6 +424,20 @@ async def callbackhandler(event):
             if len(list(json.loads(open("data.json", "r").read())[f"{chat_id}"]["dates"]))==10:
                 await event.edit("تأتي وتطلب مني تسجيل أكثر من 10 مواعيد، لكنك لا تطلب باحترام، ولا تعرض علي صداقتك، أنت لم تفكر بأن تناديني <b>بموعد</b>، مالذي فعلته لك لاستحق عدم احترامك؟", parse_mode="HTML", buttons=[[Button.inline("العودة", "back")]])
                 return
+        # اختيار تقويم الموعد
+        # choosing date calender
+        if "datetype" in data:
+            dtype = data[8:]
+            with open("data.json", "r") as f:
+                datafile = json.loads(f.read())
+            datafile[f"{chat_id}"]["dtype"] = f"{dtype}"
+            datafile[f"{chat_id}"]["doing"] = "addingdate"
+            with open("data.json", "w") as f:
+                json.dump(datafile,f)
+            if dtype == "hj":
+                await event.edit("جميل الآن أرسل التاريخ بالهجري وفق الصيغة\n<code>سنة/شهر/يوم</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
+            if dtype == "gr":
+                await event.edit("جميل الآن أرسل التاريخ بالميلادي وفق الصيغة\n<code>YYYY/MM/DD</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
         # مواعيدي
         # browsing dates
         if data == "browsedates":
@@ -405,33 +499,30 @@ async def callbackhandler(event):
                 datafile = json.loads(f.read())
             for date in datafile[f"{chat_id}"]["dates"]:
                 if date[0] == datename:
-                    year = date[1]
-                    month = date[2]
-                    day = date[3]
-                    datetimestamped = datetime.datetime(year,month,day).timestamp()-datetime.datetime.now().timestamp() + 10800
+                    year = int(date[1])
+                    month = int(date[2])
+                    day = int(date[3])
+                    hijrid = HijriDate(year,month,day, gr=True)
+                    ar_day = hijrid.day_name
+                    rdtimezone = pytz.timezone('Asia/Riyadh')
+                    datetimestamped = datetime.datetime(year,month,day).timestamp()-datetime.datetime.now(rdtimezone).timestamp()
                     days = count.countdown(datetimestamped)
                     hours = count.hours_countdown(datetimestamped)
                     minutes = count.min_countdown(datetimestamped)
                     seconds = count.sec_countdown(floor(datetimestamped%60))
                     until = ""
                     if datetimestamped>=0:
-                        if len(re.findall(r"\d+",days))>0:
-                            until = f"{days}\n{hours}\n{minutes}\n{seconds}"
-                        if len(re.findall(r"\d+",hours)) >0 and len(re.findall(r"\d+",days))==0:
-                            until = f"{hours}\n{minutes}\n{seconds}"
-                        if len(re.findall(r"\d+",minutes))>0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
-                            until = f"{minutes}\n{seconds}"
-                        if len(re.findall(r"\d+",seconds))>0 and len(re.findall(r"\d+",minutes))==0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
-                            until = f"{seconds}"
-                        await event.edit(f"موعد <code>{datename}</code> يُعقد في (<code>{year}/{month}/{day}</code>)\nويبقى عليه ⏰:\n{until}\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                        until = f"{days}\n{hours}\n{minutes}\n{seconds}"
+                        await event.edit(f"موعد <code>{datename}</code> يُعقد في يوم <code>{ar_day}</code> الموافق:\n<code>{hijrid.year}/{hijrid.month}/{hijrid.day} هـ</code>\n<code>{year}/{month}/{day} مـ</code>\nويبقى عليه ⏰:\n{until}\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
                     if datetimestamped<0:
-                        await event.edit(f"موعد <code>{datename}</code> انتهى في (<code>{year}/{month}/{day}</code>) ⏰\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                        await event.edit(f"موعد <code>{datename}</code> انتهى في يوم <code>{ar_day}</code>\nبتاريخ:\n<code>{hijrid.year}/{hijrid.month}/{hijrid.day} هـ</code>\n<code>{year}/{month}/{day} مـ</code>\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
             return
         if data == "cancel":
             with open("data.json", "r") as f:
                 datafile = json.loads(f.read())
             datafile[f"{chat_id}"]["dates"].pop()
             datafile[f"{chat_id}"]["doing"] = "start"
+            datafile[f"{chat_id}"].pop("dtype")
             with open("data.json", "w") as f:
                 json.dump(datafile,f)
             sender = await event.get_sender()
@@ -461,6 +552,21 @@ async def callbackhandler(event):
                     limit = json.loads(open("data.json", "r").read())[f"{chat_id}"]["limit"]
                     await event.edit(f"تأتي وتطلب مني تسجيل أكثر من {limit} مواعيد، لكنك لا تطلب باحترام، ولا تعرض علي صداقتك، أنت لم تفكر بأن تناديني <b>بموعد</b>، مالذي فعلته لك لاستحق عدم احترامك؟", parse_mode="HTML", buttons=[[Button.inline("العودة", "back")]])
                     return
+            # اختيار تقويم الموعد
+            # choosing date calender
+            if "datetype" in data and json.loads(open("data.json", "r").read())[f"{chat_id}"]["controller"]["doing"] == "datetype":
+                dtype = data[8:]
+                if dtype == "hj":
+                    await event.edit("جميل الآن أرسل التاريخ بالهجري وفق الصيغة\n<code>سنة/شهر/يوم</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
+                if dtype == "gr":
+                    await event.edit("جميل الآن أرسل التاريخ بالميلادي وفق الصيغة\n<code>YYYY/MM/DD</code>\n⏰", buttons= [[Button.inline("إلغاء", "cancel")]], parse_mode="HTML")
+                with open("data.json", "r") as f:
+                    datafile = json.loads(f.read())
+                datafile[f"{chat_id}"]["controller"]["dtype"] = f"{dtype}"
+                datafile[f"{chat_id}"]["controller"]["doing"] = "addingdate"
+                with open("data.json", "w") as f:
+                    json.dump(datafile,f)
+                return
             # مواعيدي
             # browsing dates
             if data == "browsedates":
@@ -522,27 +628,25 @@ async def callbackhandler(event):
                     datafile = json.loads(f.read())
                 for date in datafile[f"{chat_id}"]["dates"]:
                     if date[0] == datename:
-                        year = date[1]
-                        month = date[2]
-                        day = date[3]
-                        datetimestamped = datetime.datetime(year,month,day).timestamp()-datetime.datetime.now().timestamp() + 10800
+                        year = int(date[1])
+                        month = int(date[2])
+                        day = int(date[3])
+                        # المنطقة الزمنية
+                        # timezone
+                        hijrid = HijriDate(year,month,day, gr=True)
+                        ar_day = hijrid.day_name
+                        rdtimezone = pytz.timezone('Asia/Riyadh')
+                        datetimestamped = datetime.datetime(year,month,day).timestamp()-datetime.datetime.now(rdtimezone).timestamp()
                         days = count.countdown(datetimestamped)
                         hours = count.hours_countdown(datetimestamped)
                         minutes = count.min_countdown(datetimestamped)
                         seconds = count.sec_countdown(floor(datetimestamped%60))
                         until = ""
                         if datetimestamped>=0:
-                            if len(re.findall(r"\d+",days))>0:
-                                until = f"{days}\n{hours}\n{minutes}\n{seconds}"
-                            if len(re.findall(r"\d+",hours)) >0 and len(re.findall(r"\d+",days))==0:
-                                until = f"{hours}\n{minutes}\n{seconds}"
-                            if len(re.findall(r"\d+",minutes))>0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
-                                until = f"{minutes}\n{seconds}"
-                            if len(re.findall(r"\d+",seconds))>0 and len(re.findall(r"\d+",minutes))==0 and len(re.findall(r"\d+",hours))==0 and len(re.findall(r"\d+",days))==0:
-                                until = f"{seconds}"
-                            await event.edit(f"موعد <code>{datename}</code> يُعقد في (<code>{year}/{month}/{day}</code>)\nويبقى عليه ⏰:\n{until}\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                            until = f"{days}\n{hours}\n{minutes}\n{seconds}"
+                            await event.edit(f"موعد <code>{datename}</code> يُعقد في يوم <code>{ar_day}</code> الموافق:\n<code>{hijrid.year}/{hijrid.month}/{hijrid.day} هـ</code>\n<code>{year}/{month}/{day} مـ</code>\nويبقى عليه ⏰:\n{until}\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
                         if datetimestamped<0:
-                            await event.edit(f"موعد <code>{datename}</code> انتهى في (<code>{year}/{month}/{day}</code>) ⏰\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
+                            await event.edit(f"موعد <code>{datename}</code> انتهى في يوم <code>{ar_day}</code>\nبتاريخ:\n<code>{hijrid.year}/{hijrid.month}/{hijrid.day} هـ</code>\n<code>{year}/{month}/{day} مـ</code>\nلا إله إلا الله",buttons = [[Button.inline("العودة", "browsedates")]],parse_mode = "HTML")
                 return
             # إلغاء تسجيل الموعد
             # canceling date
